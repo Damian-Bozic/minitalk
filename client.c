@@ -5,8 +5,8 @@
 /*                                                    +:+ +:+         +:+     */
 /*   By: dbozic <marvin@42.fr>                      +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
-/*   Created: 2024/06/11 16:25:48 by dbozic            #+#    #+#             */
-/*   Updated: 2024/06/11 16:25:50 by dbozic           ###   ########.fr       */
+/*   Created: 2024/06/11 16:25:55 by dbozic            #+#    #+#             */
+/*   Updated: 2024/06/14 15:03:27 by dbozic           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -16,11 +16,11 @@ int	error_exit(int	error)
 {
 	ft_printf("ERROR %d\n", error);
 	if (error == 0)
-		ft_printf("malloc failed to allocate\n");
+		ft_printf("Malloc failed to allocate\n");
 	else if (error == 1)
-		ft_printf("PID failed to send\n");
+		ft_printf("Failed to identify given PID\n");
 	else if (error == 2)
-		ft_printf("\n");
+		ft_printf("Server has not responded after message was sent\n");
 	exit(error);
 }
 
@@ -62,7 +62,7 @@ int	ft_binary_atoi(char *str)
 	return (rtn);
 }
 
-int	send_binary(char *str, int sig)
+int	send_binary(char *str, int pid)
 {
 	int	i;
 
@@ -73,20 +73,21 @@ int	send_binary(char *str, int sig)
 	{
 		if (str[i] == '0')
 		{
-			if (kill(sig, SIGUSR1) == -1)
+			if (kill(pid, SIGUSR1) == -1)
 			{
 				free(str);
 				return (0);
 			}
 		}
-		else if (kill(sig, SIGUSR2) == -1)
+		else if (kill(pid, SIGUSR2) == -1)
 		{
 			free(str);
 			return (0);
 		}
 		i++;
-		usleep(120);
+		usleep(100);
 	}
+    free(str);
 	return (1);
 }
 
@@ -131,7 +132,6 @@ void	send_pid(int sender, int reciever)
 		error_exit(0);
 	final = ft_strjoin ("11111000", raw_pid);
 	free (raw_pid);
-	ft_printf("%s\n", final);
 	if (!final)
 		error_exit(0);
 	if (!send_binary(final, reciever))
@@ -140,15 +140,44 @@ void	send_pid(int sender, int reciever)
 
 void	send_message(int pid, char *message)
 {
-	send_pid(getpid(), pid);
+    int         i;
+    char        *byte;
 
+    send_pid(getpid(), pid);
+    i = 0;
+    while (message[i])
+    {
+        byte = ft_binary_itoa(message[i]);
+        if (!byte)
+            error_exit(0);
+        if(!send_binary(byte, pid))
+            error_exit(1);
+        byte = NULL;
+        i++;
+    }
+    byte = ft_strdup("11111100");
+    if (!byte)
+        exit(0);
+    send_binary(byte, pid);
+    sleep(5);
+    error_exit(2);
 }
-//send own PID in the process.
+
+void reciever(int signal)
+{
+    if (signal == SIGUSR1)
+        ft_printf("Kicked from server\n");
+    else if (signal == SIGUSR2)
+        ft_printf("Server recieved message successfully\n");
+    exit(1);
+}
 
 int	main(int argc, char	**argv)
 {
 	int	pid;
 
+    signal(SIGUSR1, reciever);
+    signal(SIGUSR2, reciever);
 	if (argc != 3)
 	{
 		ft_printf("Invalid input\nTry again using the format: ");
@@ -156,10 +185,8 @@ int	main(int argc, char	**argv)
 		return (0);
 	}
 	pid = ft_atoi(argv[1]);
-	send_message(pid, argv[1]);
-	while (1)
-		pause();
-	ft_printf("sent all\n");
+	send_message(pid, argv[2]);
+	pause();
 }
 
 // UTF-8

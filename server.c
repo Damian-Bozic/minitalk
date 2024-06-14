@@ -12,73 +12,194 @@
 
 #include "minitalk.h"
 
+static char	*ft_strjoin_mod(char *str1, char *str2, size_t i, size_t j)
+{
+	char		*rtn;
+
+	if (!str1)
+		str1 = ft_strdup("");
+	if (!str1)
+		return (0);
+	rtn = malloc(ft_strlen(str1) + ft_strlen(str2) + 1);
+	if (!rtn)
+		free (str1);
+	if (!rtn)
+		return (0);
+	while (str1 && str1[i])
+	{
+		rtn[i] = str1[i];
+		i++;
+	}
+	while (str2 && str2[j])
+	{
+		rtn[i + j] = str2[j];
+		j++;
+	}
+	rtn[i + j] = '\0';
+	free(str1);
+	str1 = NULL;
+	return (rtn);
+}
+
 int	error_exit(int	error)
 {
 	ft_printf("ERROR %d\n", error);
 	if (error == 0)
-		ft_printf("malloc failed to allocate\n");
+	    ft_printf("Malloc failed to allocate\n");
 	else if (error == 1)
-		ft_printf("PID failed to send\n");
-	else if (error == 2)
-		ft_printf("\n");
-	exit(error);
+	    ft_printf("PID failed to send\n");
+    else if (error == 2)
+    {
+        ft_printf("Client failed to send entire message\n");
+    }
+    exit(error);
 }
-
-void    print_char(char *data, int size)
+int	ft_binary_atoi_mod(char *str)
 {
-    //if size is larger than 1 byte check if it isnt corrupted
-    //then print
+	int i;
+	int	rtn;
+	int	power;
+
+	i = 8;
+	rtn = str[i - 1] - '0';
+	i = i - 2;
+	power = 2;
+	while (i >= 0)
+	{
+		rtn = rtn + ((str[i] - '0') * power);
+		power = power * 2;
+		i--;
+	}
+	return (rtn);
 }
 
-int printer(int bit)
+int pid_binary_atoi(char *str)
+{
+    int i;
+    int j;
+    int power;
+    int rtn;
+
+    i = 38;
+    power = 2;
+    rtn = (str[39] - '0');
+    j = 1;
+    while (i > 9)
+    {
+        while (j < 6)
+        {
+            rtn = rtn + ((str[i] - '0') * power);
+            power = power * 2;
+            i--;
+            j++;
+        }
+        i = i - 2;
+        j = 0;
+    }
+    return (rtn);
+}
+
+void    pid_event_handler(char *code)
+{
+    static int  client = 0;
+
+    if (client == 0 && ft_strncmp(code, "11111000", 8) == 0)
+    {
+        client = pid_binary_atoi(code);
+        ft_printf("\nSuccessfully connection with %d\n", client);
+    }
+    else if (client != 0 && ft_strncmp(code, "11111100", 8) == 0)
+    {
+        ft_printf("\nEnd of %d's message.\n", client);
+        if (kill(client, SIGUSR2) == -1)
+            error_exit(1);
+        client = 0;
+    }
+}
+
+char *handle_special_char(char *chr)
+{
+    unsigned char byte_array[4];
+    int i;
+    int j;
+
+    i = 0;
+    while (chr[i] == '1')
+        i++;
+    if (i <= 4)
+    {
+        j = (i - 1) * 8;
+        while (i > 0)
+        {
+            byte_array[i - 1] = ft_binary_atoi_mod(&chr[j]);
+            j = j - 8;
+            i--;
+        }
+        write(1, byte_array, sizeof(byte_array));
+    }
+    if (i > 4)
+        pid_event_handler(chr);
+    free(chr);
+    return (NULL);
+}
+
+void print_char(char *byte)
+{
+    static char *chr = NULL;
+    static int  flag = 0;
+
+    if (ft_strncmp(byte, "11111100", 8) == 0)
+        pid_event_handler(byte);
+    else if (ft_strncmp(byte, "0", 1) == 0 && flag == 0 && !chr)
+        ft_printf("%c", ft_binary_atoi_mod(byte));
+    else if (ft_strncmp(byte, "11", 2) == 0 && !chr)
+    {
+        while (byte[flag + 1] == '1' && flag <= 4)
+            flag++;
+        chr = ft_strdup(byte);
+    }
+    else if (ft_strncmp(byte, "10", 2) == 0 && flag != 0 && chr)
+    {
+        flag--;
+        chr = ft_strjoin_mod(chr, byte, 0, 0);
+    }
+    if (chr && flag == 0)
+        chr = handle_special_char(chr);
+}
+
+void bit_intake(int bit)
 {
     static int  bytepos = 0;
     static char *byte = NULL;
 
-    // find how many bytes there will be from the first byte
-    if (!byte && bit == 0 && bytepos == 0)
+    if (!byte && bytepos == 0)
     {
-        byte = malloc(41);
+        byte = malloc(9);
         if (!byte)
-            return(0);
-        ft_bzero(byte, 41);
+            error_exit(0);
+        byte[8] = 0;
     }
     byte[bytepos] = bit + '0';
-    if (bytepos >= 7)
-    {
-        if (utf8_char(byte) = 1)
-            // HUGE WIP
-        else
-        {
-            print_char(byte, 1);
-            bytepos = 0;
-        }
-    }
     bytepos++;
-    return(1);
+    if (bytepos >= 8)
+    {
+        print_char(byte);
+        free(byte);
+        byte = NULL;
+        bytepos = 0;
+    }
 }
 
 void    signal_handler(int signal)
 {
-    static long  flag = 0;
-    static char *client = NULL;
-
-    if (!client)
+    if (signal == SIGUSR1)
     {
-        client = malloc(41);
-        ft_bzero(client, 41);
+        bit_intake(0);
     }
-    if (signal == SIGUSR1 && flag >= 40)
-        printer(0);
-    else if (signal == SIGUSR2 && flag >= 40)
-        printer(1);
-    if (flag < 40 && signal == SIGUSR1)
-        client[flag] = '0';
-    else if (flag < 40 && signal == SIGUSR2)
-        client[flag] = '1';
-    if (flag == 39)
-        ft_printf("%s\n", client);
-    flag++;
+    else if (signal == SIGUSR2)
+    {
+        bit_intake(1);
+    }
 }
 
 int	main(void)
@@ -87,62 +208,7 @@ int	main(void)
     signal(SIGUSR1, signal_handler);
     signal(SIGUSR2, signal_handler);
     while (1)
-        pause();
+    {      
+    }
 	return (1);
 }
-
-/* Certainly! To send a signal from a server to a client in C, 
-you can use the kill() function. Here’s a basic example:
-
-Server Side:
-First, obtain the client’s process ID (PID).
-Then, use kill() to send a signal to the client process.
-#include <signal.h>
-#include <stdio.h>
-#include <unistd.h>
-
-int main(int argc, char *argv[]) {
-    pid_t clientPID; // Get the client's PID (e.g., through command line arguments)
-    // ...
-    // Some server logic
-    // ...
-
-    // Send a signal to the client
-    kill(clientPID, SIGUSR1); // You can use any signal you want (e.g., SIGUSR1)
-    return 0;
-}
-
-Client Side:
-Handle the signal in the client process using a signal handler.
-For example, you can print a message when the signal is received.
-#include <signal.h>
-#include <stdio.h>
-#include <unistd.h>
-
-void handleSignal(int signum) {
-    if (signum == SIGUSR1) {
-        printf("Received signal from server!\n");
-        // Handle the signal as needed
-    }
-}
-
-int main() {
-    // Set up the signal handler
-    signal(SIGUSR1, handleSignal);
-
-    // ...
-    // Some client logic
-    // ...
-
-    // Keep the client process running
-    while (1) {
-        // ...
-        // Your client code here
-        // ...
-    }
-    return 0;
-}
-
-Remember to replace the placeholders with your actual server and client logic.
- Additionally, choose an appropriate signal (e.g., SIGUSR1) based on your
-  requirements1. Happy coding! 🚀 */
