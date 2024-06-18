@@ -22,7 +22,7 @@
 // 4-byte: 		11110XXX 10XXXXXX 10XXXXXX 10XXXXXX (utf-8)
 // PID:    		11111000 10XXXXXX 10XXXXXX 10XXXXXX 10XXXXXX (custom)
 // last byte:	11111100 (custom)
-char	*handle_special_char(char *chr)
+static char	*handle_special_char(char *chr)
 {
 	unsigned char	byte_array[4];
 	int				i;
