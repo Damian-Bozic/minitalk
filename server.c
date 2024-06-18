@@ -12,203 +12,121 @@
 
 #include "minitalk.h"
 
-static char	*ft_strjoin_mod(char *str1, char *str2, size_t i, size_t j)
+// handle_special_char takes in a byte in the form of a str, then depending on
+// its type (start of a UTF-8 char, PID, or end of message byte) it will either 
+// print a UTF-8 char, or send the collected binary str to pid_event_handler()
+// ENCODING FORMAT:
+// 1-byte: 		0XXXXXXX (ascii)
+// 2-byte: 		110XXXXX 10XXXXXX (utf-8)
+// 3-byte: 		1110XXXX 10XXXXXX 10XXXXXX (utf-8)
+// 4-byte: 		11110XXX 10XXXXXX 10XXXXXX 10XXXXXX (utf-8)
+// PID:    		11111000 10XXXXXX 10XXXXXX 10XXXXXX 10XXXXXX (custom)
+// last byte:	11111100 (custom)
+char	*handle_special_char(char *chr)
 {
-	char		*rtn;
+	unsigned char	byte_array[4];
+	int				i;
+	int				j;
 
-	if (!str1)
-		str1 = ft_strdup("");
-	if (!str1)
-		return (0);
-	rtn = malloc(ft_strlen(str1) + ft_strlen(str2) + 1);
-	if (!rtn)
-		free (str1);
-	if (!rtn)
-		return (0);
-	while (str1 && str1[i])
-	{
-		rtn[i] = str1[i];
+	i = 0;
+	while (chr[i] == '1')
 		i++;
-	}
-	while (str2 && str2[j])
+	if (i <= 4)
 	{
-		rtn[i + j] = str2[j];
-		j++;
+		j = (i - 1) * 8;
+		while (i > 0)
+		{
+			byte_array[i - 1] = ft_binary_atoi_mod(&chr[j]);
+			j = j - 8;
+			i--;
+		}
+		write(1, byte_array, sizeof(byte_array));
 	}
-	rtn[i + j] = '\0';
-	free(str1);
-	str1 = NULL;
-	return (rtn);
+	if (i > 4)
+		pid_event_handler(chr);
+	free(chr);
+	return (NULL);
 }
 
-int	error_exit(int	error)
+// print_char takes in a binary string if that str is an ascii char it 
+// will print the char, if it is a special str (UTF-8 char or Special 
+// code) it will wait until all extra bytes are collected, then it will
+// send that mutli byte binary str to handle_special_char().
+static void	print_char(char *byte)
 {
-	ft_printf("ERROR %d\n", error);
-	if (error == 0)
-	    ft_printf("Malloc failed to allocate\n");
-	else if (error == 1)
-	    ft_printf("PID failed to send\n");
-    else if (error == 2)
-    {
-        ft_printf("Client failed to send entire message\n");
-    }
-    exit(error);
-}
-int	ft_binary_atoi_mod(char *str)
-{
-	int i;
-	int	rtn;
-	int	power;
+	static char	*chr = NULL;
+	static int	flag = 0;
 
-	i = 8;
-	rtn = str[i - 1] - '0';
-	i = i - 2;
-	power = 2;
-	while (i >= 0)
+	if (ft_strncmp(byte, "11111100", 8) == 0)
+		pid_event_handler(byte);
+	else if (ft_strncmp(byte, "0", 1) == 0 && flag == 0 && !chr)
+		ft_printf("%c", ft_binary_atoi_mod(byte));
+	else if (ft_strncmp(byte, "11", 2) == 0 && !chr)
 	{
-		rtn = rtn + ((str[i] - '0') * power);
-		power = power * 2;
-		i--;
+		while (byte[flag + 1] == '1' && flag <= 4)
+			flag++;
+		chr = ft_strdup(byte);
 	}
-	return (rtn);
+	else if (ft_strncmp(byte, "10", 2) == 0 && flag != 0 && chr)
+	{
+		flag--;
+		chr = ft_strjoin_mod(chr, byte, 0, 0);
+	}
+	if (chr && flag == 0)
+		chr = handle_special_char(chr);
 }
 
-int pid_binary_atoi(char *str)
+// bit_intake takes in one bit at a time, then creates a binary string
+// that once holds 8 bits, gets sent to print_char.
+static void	bit_intake(int bit)
 {
-    int i;
-    int j;
-    int power;
-    int rtn;
+	static int	bytepos = 0;
+	static char	*byte = NULL;
 
-    i = 38;
-    power = 2;
-    rtn = (str[39] - '0');
-    j = 1;
-    while (i > 9)
-    {
-        while (j < 6)
-        {
-            rtn = rtn + ((str[i] - '0') * power);
-            power = power * 2;
-            i--;
-            j++;
-        }
-        i = i - 2;
-        j = 0;
-    }
-    return (rtn);
+	if (!byte && bytepos == 0)
+	{
+		byte = malloc(9);
+		if (!byte)
+		{
+			ft_printf("ERROR 0\nMalloc failed to allocate\n");
+			exit(0);
+		}
+		byte[8] = 0;
+	}
+	byte[bytepos] = bit + '0';
+	bytepos++;
+	if (bytepos >= 8)
+	{
+		print_char(byte);
+		free(byte);
+		byte = NULL;
+		bytepos = 0;
+	}
 }
 
-void    pid_event_handler(char *code)
+// signal_handler is ran when a signal is recieved. It can recieve only
+// two types of signal, 1 or 0, which is then sent to bit_intake.
+static void	signal_handler(int signal)
 {
-    static int  client = 0;
-
-    if (client == 0 && ft_strncmp(code, "11111000", 8) == 0)
-    {
-        client = pid_binary_atoi(code);
-        ft_printf("\nSuccessfully connection with %d\n", client);
-    }
-    else if (client != 0 && ft_strncmp(code, "11111100", 8) == 0)
-    {
-        ft_printf("\nEnd of %d's message.\n", client);
-        if (kill(client, SIGUSR2) == -1)
-            error_exit(1);
-        client = 0;
-    }
+	if (signal == SIGUSR1)
+	{
+		bit_intake(0);
+	}
+	else if (signal == SIGUSR2)
+	{
+		bit_intake(1);
+	}
 }
 
-char *handle_special_char(char *chr)
-{
-    unsigned char byte_array[4];
-    int i;
-    int j;
-
-    i = 0;
-    while (chr[i] == '1')
-        i++;
-    if (i <= 4)
-    {
-        j = (i - 1) * 8;
-        while (i > 0)
-        {
-            byte_array[i - 1] = ft_binary_atoi_mod(&chr[j]);
-            j = j - 8;
-            i--;
-        }
-        write(1, byte_array, sizeof(byte_array));
-    }
-    if (i > 4)
-        pid_event_handler(chr);
-    free(chr);
-    return (NULL);
-}
-
-void print_char(char *byte)
-{
-    static char *chr = NULL;
-    static int  flag = 0;
-
-    if (ft_strncmp(byte, "11111100", 8) == 0)
-        pid_event_handler(byte);
-    else if (ft_strncmp(byte, "0", 1) == 0 && flag == 0 && !chr)
-        ft_printf("%c", ft_binary_atoi_mod(byte));
-    else if (ft_strncmp(byte, "11", 2) == 0 && !chr)
-    {
-        while (byte[flag + 1] == '1' && flag <= 4)
-            flag++;
-        chr = ft_strdup(byte);
-    }
-    else if (ft_strncmp(byte, "10", 2) == 0 && flag != 0 && chr)
-    {
-        flag--;
-        chr = ft_strjoin_mod(chr, byte, 0, 0);
-    }
-    if (chr && flag == 0)
-        chr = handle_special_char(chr);
-}
-
-void bit_intake(int bit)
-{
-    static int  bytepos = 0;
-    static char *byte = NULL;
-
-    if (!byte && bytepos == 0)
-    {
-        byte = malloc(9);
-        if (!byte)
-            error_exit(0);
-        byte[8] = 0;
-    }
-    byte[bytepos] = bit + '0';
-    bytepos++;
-    if (bytepos >= 8)
-    {
-        print_char(byte);
-        free(byte);
-        byte = NULL;
-        bytepos = 0;
-    }
-}
-
-void    signal_handler(int signal)
-{
-    if (signal == SIGUSR1)
-    {
-        bit_intake(0);
-    }
-    else if (signal == SIGUSR2)
-    {
-        bit_intake(1);
-    }
-}
-
+// main opens two signal channels that listen for signals,
+// then waits indefinitely.
 int	main(void)
 {
 	ft_printf("Server PID: %d\n", getpid());
-    signal(SIGUSR1, signal_handler);
-    signal(SIGUSR2, signal_handler);
-    while (1)
-    {      
-    }
+	signal(SIGUSR1, signal_handler);
+	signal(SIGUSR2, signal_handler);
+	while (1)
+	{
+	}
 	return (1);
 }

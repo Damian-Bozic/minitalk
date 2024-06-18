@@ -21,7 +21,8 @@ SOURCES = $(addprefix Libft/, \
 	  ft_strtrim.c ft_split.c ft_itoa.c ft_strmapi.c ft_striteri.c \
 	  ft_putchar_fd.c ft_putstr_fd.c ft_putendl_fd.c ft_putnbr_fd.c  \
 	  get_next_line.c ft_printf.c ft_printf_d.c ft_printf_s.c \
-	  ft_printf_u.c ft_printf_xx.c ft_printf_c.c ft_printf_p.c)
+	  ft_printf_u.c ft_printf_xx.c ft_printf_c.c ft_printf_p.c) \
+	  helper_server_functions.c helper_client_functions.c
 OBJECTS = $(SOURCES:%.c=%.o)
 NAME = minitalk.a
 

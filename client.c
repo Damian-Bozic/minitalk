@@ -12,115 +12,25 @@
 
 #include "minitalk.h"
 
-int	error_exit(int	error)
+// error_exit takes in an int that represents the occured error, prints the
+// error, then closes the program.
+static int	error_exit(int error)
 {
 	ft_printf("ERROR %d\n", error);
 	if (error == 0)
 		ft_printf("Malloc failed to allocate\n");
 	else if (error == 1)
-		ft_printf("Failed to identify given PID\n");
+		ft_printf("Invalid server PID, please check if given PID is valid\n");
 	else if (error == 2)
 		ft_printf("Server has not responded after message was sent\n");
+	else if (error == 3)
+		ft_printf("Connection with server lost unexpectedly");
 	exit(error);
 }
 
-char *ft_binary_itoa(unsigned char nbr)
-{
-	char *rtn;
-	int	i;
-
-	i = 7;
-	rtn = malloc(9);
-	if (!rtn)
-		return (NULL);
-	rtn[8] = 0;
-	while (i >= 0)
-	{
-		rtn[i] = (nbr % 2) + '0';
-		nbr = nbr / 2;
-		i--;
-	}
-	return (rtn);
-}
-
-int	ft_binary_atoi(char *str)
-{
-	int i;
-	int	rtn;
-	int	power;
-
-	i = ft_strlen(str);
-	rtn = str[i - 1] - '0';
-	i = i - 2;
-	power = 2;
-	while (i >= 0)
-	{
-		rtn = rtn + ((str[i] - '0') * power);
-		power = power * 2;
-		i--;
-	}
-	return (rtn);
-}
-
-int	send_binary(char *str, int pid)
-{
-	int	i;
-
-	i = 0;
-	if (!str)
-		error_exit(1);
-	while (str[i])
-	{
-		if (str[i] == '0')
-		{
-			if (kill(pid, SIGUSR1) == -1)
-			{
-				free(str);
-				return (0);
-			}
-		}
-		else if (kill(pid, SIGUSR2) == -1)
-		{
-			free(str);
-			return (0);
-		}
-		i++;
-		usleep(100);
-	}
-    free(str);
-	return (1);
-}
-
-char *full_binary_pid(int pid)
-{
-	char	*rtn;
-	int	i;
-	int	j;
-
-	i = 31;
-	rtn = malloc(33);
-	if (!rtn)
-		return (NULL);
-	rtn[32] = 0;
-	while (i >= 0)
-	{
-		j = 6;
-		while (j > 0)
-		{
-			rtn[i] = (pid % 2) + '0';
-			pid = pid / 2;
-			i--;
-			j--;
-		}
-		rtn[i] = '0';
-		i--;
-		rtn[i] = '1';
-		i--;
-	}
-	return (rtn);
-}
-
-void	send_pid(int sender, int reciever)
+// send_pid sends the process id of the sender program to the
+// reciever program in binary
+static void	send_pid(int sender, int reciever)
 {
 	char	*raw_pid;
 	char	*final;
@@ -138,46 +48,50 @@ void	send_pid(int sender, int reciever)
 		error_exit(1);
 }
 
-void	send_message(int pid, char *message)
+// send_message sends the programs PID, text message, and exit byte to the
+// process id (the server) using signals (1's and 0's).
+static void	send_message(int pid, char *message)
 {
-    int         i;
-    char        *byte;
+	int		i;
+	char	*byte;
 
-    send_pid(getpid(), pid);
-    i = 0;
-    while (message[i])
-    {
-        byte = ft_binary_itoa(message[i]);
-        if (!byte)
-            error_exit(0);
-        if(!send_binary(byte, pid))
-            error_exit(1);
-        byte = NULL;
-        i++;
-    }
-    byte = ft_strdup("11111100");
-    if (!byte)
-        exit(0);
-    send_binary(byte, pid);
-    sleep(5);
-    error_exit(2);
+	send_pid(getpid(), pid);
+	i = 0;
+	while (message[i])
+	{
+		byte = ft_binary_itoa(message[i]);
+		if (!byte)
+			error_exit(0);
+		if (!send_binary(byte, pid))
+			error_exit(3);
+		byte = NULL;
+		i++;
+	}
+	byte = ft_strdup("11111100");
+	send_binary(byte, pid);
+	sleep(5);
+	error_exit(2);
 }
 
-void reciever(int signal)
+// reciever runs when the program recieves a signal, prints an exit
+// message and then closes the program.
+static void	reciever(int signal)
 {
-    if (signal == SIGUSR1)
-        ft_printf("Kicked from server\n");
-    else if (signal == SIGUSR2)
-        ft_printf("Server recieved message successfully\n");
-    exit(1);
+	if (signal == SIGUSR1)
+		ft_printf("Kicked from server\n");
+	else if (signal == SIGUSR2)
+		ft_printf("Server recieved message successfully\n");
+	exit(1);
 }
 
+// main opens two signal channels that wait for a signal from the
+// server, calls send_message, then waits indefinetly for exit().
 int	main(int argc, char	**argv)
 {
 	int	pid;
 
-    signal(SIGUSR1, reciever);
-    signal(SIGUSR2, reciever);
+	signal(SIGUSR1, reciever);
+	signal(SIGUSR2, reciever);
 	if (argc != 3)
 	{
 		ft_printf("Invalid input\nTry again using the format: ");
@@ -190,10 +104,12 @@ int	main(int argc, char	**argv)
 }
 
 // UTF-8
-// 1-byte: 0XXXXXXX
-// 2-byte: 110XXXXX 10XXXXXX
-// 3-byte: 1110XXXX 10XXXXXX 10XXXXXX
-// 4-byte: 11110XXX 10XXXXXX 10XXXXXX 10XXXXXX
+// 1-byte: 		0XXXXXXX
+// 2-byte: 		110XXXXX 10XXXXXX
+// 3-byte: 		1110XXXX 10XXXXXX 10XXXXXX
+// 4-byte: 		11110XXX 10XXXXXX 10XXXXXX 10XXXXXX
+// PID:    		11111000 10XXXXXX 10XXXXXX 10XXXXXX 10XXXXXX
+// last byte:	11111100
 
 // CODE GRAVEYARD:
 
