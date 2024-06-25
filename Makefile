@@ -30,6 +30,8 @@ all: $(NAME)
 
 $(NAME): $(OBJECTS)
 	ar rcs $(NAME) $(OBJECTS)
+	$(CC) $(FLAGS) client.c $(NAME) -o client
+	$(CC) $(FLAGS) server.c $(NAME) -o server
 
 %.o: %.c
 	$(CC) $(FLAGS) -I. -o $@ -c $<
@@ -38,7 +40,7 @@ clean:
 	rm -f $(OBJECTS)
 
 fclean: clean
-	rm -f $(NAME)
+	rm -f $(NAME) client server
 
 re: fclean all
 
